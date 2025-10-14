@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudShare - Пошук житла для студентів</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Навігаційна панель -->
+    <nav class="navbar navbar-light bg-white shadow-sm fixed-top">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand logo" href="#">
+                <span class="logo-icon">🏠</span>
+                <span class="logo-text">StudShare</span>
+            </a>
+            <button class="btn btn-add-nav" data-bs-toggle="modal" data-bs-target="#addListingModal">
+                <span class="btn-icon">+</span> Додати оголошення
+            </button>
+        </div>
+    </nav>
+
+    <!-- Заголовок -->
+    <div class="header">
+        <div class="container">
+            <h1 class="header-title">Знайди своє ідеальне житло</h1>
+            <p class="header-subtitle">для студентів ЛНУ імені Івана Франка</p>
+        </div>
+    </div>
+
+    <div class="container main-content">
+        <!-- Фільтри -->
+        <div class="filters-section">
+            <h5 class="filters-title mb-4">Фільтри пошуку</h5>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Ціна до</label>
+                    <div class="price-slider-container">
+                        <input type="range" class="form-range price-slider" id="filterPrice" 
+                               min="1000" max="10000" step="500" value="10000">
+                        <div class="price-display">
+                            <span id="priceValue">10000</span> грн/міс
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Район</label>
+                    <select class="form-select custom-select" id="filterDistrict">
+                        <option value="">Всі райони</option>
+                        <option value="Франківський">Франківський</option>
+                        <option value="Галицький">Галицький</option>
+                        <option value="Залізничний">Залізничний</option>
+                        <option value="Личаківський">Личаківський</option>
+                        <option value="Шевченківський">Шевченківський</option>
+                        <option value="Сихівський">Сихівський</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Факультет</label>
+                    <select class="form-select custom-select" id="filterFaculty">
+                        <option value="">Всі факультети</option>
+                        <option value="Філологічний">Філологічний</option>
+                        <option value="Історичний">Історичний</option>
+                        <option value="Економічний">Економічний</option>
+                        <option value="Журналістики">Журналістики</option>
+                        <option value="Іноземних мов">Іноземних мов</option>
+                        <option value="Прикладної математики та інформатики">Прикладної математики та інформатики</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Стать</label>
+                    <select class="form-select custom-select" id="filterGender">
+                        <option value="">Не важливо</option>
+                        <option value="хлопець">Хлопець</option>
+                        <option value="дівчина">Дівчина</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mt-4">
+                <div class="col-12">
+                    <button class="btn btn-primary-custom" onclick="applyFilters()">Застосувати фільтри</button>
+                    <button class="btn btn-secondary-custom" onclick="resetFilters()">Скинути</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список оголошень -->
+        <div id="listingsContainer"></div>
+    </div>
+
+    <!-- Модальне вікно -->
+    <div class="modal fade" id="addListingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Додати нове оголошення</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addListingForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Стать *</label>
+                                <select class="form-select custom-select" name="gender" required>
+                                    <option value="">Оберіть...</option>
+                                    <option value="хлопець">Хлопець</option>
+                                    <option value="дівчина">Дівчина</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Факультет *</label>
+                                <select class="form-select custom-select" name="faculty" required>
+                                    <option value="">Оберіть...</option>
+                                    <option value="Філологічний">Філологічний</option>
+                                    <option value="Історичний">Історичний</option>
+                                    <option value="Економічний">Економічний</option>
+                                    <option value="Журналістики">Журналістики</option>
+                                    <option value="Іноземних мов">Іноземних мов</option>
+                                    <option value="Прикладної математики та інформатики">Прикладної математики та інформатики</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Курс *</label>
+                                <select class="form-select custom-select" name="course" required>
+                                    <option value="">Оберіть...</option>
+                                    <option value="1">1 курс</option>
+                                    <option value="2">2 курс</option>
+                                    <option value="3">3 курс</option>
+                                    <option value="4">4 курс</option>
+                                    <option value="5">5 курс</option>
+                                    <option value="6">6 курс</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Спеціальність *</label>
+                                <input type="text" class="form-control custom-input" name="specialty" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Район *</label>
+                                <select class="form-select custom-select" name="district" required>
+                                    <option value="">Оберіть...</option>
+                                    <option value="Франківський">Франківський</option>
+                                    <option value="Галицький">Галицький</option>
+                                    <option value="Залізничний">Залізничний</option>
+                                    <option value="Личаківський">Личаківський</option>
+                                    <option value="Шевченківський">Шевченківський</option>
+                                    <option value="Сихівський">Сихівський</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Адреса *</label>
+                                <input type="text" class="form-control custom-input" name="address" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Кількість кімнат *</label>
+                                <input type="number" class="form-control custom-input" name="rooms_count" min="1" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Кількість мешканців *</label>
+                                <input type="number" class="form-control custom-input" name="people_count" min="1" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Ціна (грн/міс) *</label>
+                                <input type="number" class="form-control custom-input" name="price" min="0" required>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check custom-checkbox">
+                                    <input class="form-check-input" type="checkbox" name="utilities_included" id="utilities">
+                                    <label class="form-check-label" for="utilities">
+                                        Комунальні послуги включені в ціну
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Додаткова інформація</label>
+                                <textarea class="form-control custom-input" name="additional_info" rows="3"></textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Телефон *</label>
+                                <input type="tel" class="form-control custom-input" name="contact_phone" placeholder="+380 67 123 4567" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Telegram</label>
+                                <input type="text" class="form-control custom-input" name="contact_telegram" placeholder="@username">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Instagram</label>
+                                <input type="text" class="form-control custom-input" name="contact_instagram" placeholder="@username">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary-custom" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="button" class="btn btn-primary-custom" onclick="submitListing()">Опублікувати</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
