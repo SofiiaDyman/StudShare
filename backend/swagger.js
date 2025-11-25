@@ -23,8 +23,26 @@ const options = {
       {
         name: 'Listings',
         description: 'Операції з оголошеннями про житло'
+      },
+      {
+        name: 'Auth',
+        description: 'Реєстрація користувачів і вхід'
+      },
+      {
+        name: 'Favorites',
+        description: 'Керування обраними оголошеннями'
       }
-    ]
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT токен, що повертається після /auth/login або /auth/register'
+        }
+      }
+    }
   },
   apis: ['./routes/*.js'],
 };

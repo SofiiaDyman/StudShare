@@ -1,6 +1,11 @@
 // ===== КОНФІГУРАЦІЯ =====
-const API_URL = 'http://localhost:3000/api/listings';
-const USE_API = false; // Змінити на true коли запустиш backend
+const API_BASE = 'http://localhost:3000/api';
+const ENDPOINTS = {
+    listings: `${API_BASE}/listings`,
+    auth: `${API_BASE}/auth`,
+    favorites: `${API_BASE}/favorites`
+};
+const USE_API = true; // вимкни, якщо хочеш працювати лише з локальними даними
 
 // ===== ГЕНЕРАЦІЯ УНІКАЛЬНОГО ID СТУДЕНТА =====
 let currentStudentId = localStorage.getItem('studentId');
@@ -10,85 +15,61 @@ if (!currentStudentId) {
 }
 console.log('📱 Твій ID студента:', currentStudentId);
 
-// ===== ТИМЧАСОВІ ДАНІ (тестові оголошення) =====
-let allListings = [
-    {
-        id: 1,
-        student_id: 'student_sample_1',
-        gender: 'дівчина',
-        faculty: 'Прикладної математики та інформатики',
-        course: 3,
-        specialty: 'Комп\'ютерні науки',
-        district: 'Франківський',
-        address: 'вул. Наукова, 15',
-        rooms_count: 2,
-        people_count: 1,
-        price: 2500,
-        utilities_included: true,
-        additional_info: 'Тиха квартира, поблизу університет.',
-        contact_phone: '+380 67 123 4567',
-        contact_telegram: '@example_user',
-        contact_instagram: '@example_user',
-        created_at: '2024-03-15'
-    },
-    {
-        id: 2,
-        student_id: 'student_sample_2',
-        gender: 'хлопець',
-        faculty: 'Економічний',
-        course: 2,
-        specialty: 'Економіка',
-        district: 'Сихівський',
-        address: 'вул. Стрийська, 201',
-        rooms_count: 3,
-        people_count: 2,
-        price: 2000,
-        utilities_included: false,
-        additional_info: 'Велика квартира, є Wi-Fi, пральна машина.',
-        contact_phone: '+380 95 987 6543',
-        contact_telegram: '@student_lviv',
-        contact_instagram: '',
-        created_at: '2024-03-20'
-    },
-    {
-        id: 3,
-        student_id: 'student_sample_3',
-        gender: 'дівчина',
-        faculty: 'Філологічний',
-        course: 4,
-        specialty: 'Українська мова',
-        district: 'Галицький',
-        address: 'вул. Коперника, 7',
-        rooms_count: 2,
-        people_count: 1,
-        price: 3000,
-        utilities_included: true,
-        additional_info: 'Центр міста, поруч бібліотека.',
-        contact_phone: '+380 98 765 4321',
-        contact_telegram: '@studentka_lnu',
-        contact_instagram: '@student_life',
-        created_at: '2024-03-22'
-    }
-];
+// ===== СТАН ПРИКЛАДУ =====
+let allListings = [];
+let authUser = null;
+let favoriteIds = new Set();
+let favoriteListings = [];
 
-// ===== ІНІЦІАЛІЗАЦІЯ =====
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     initializePriceSlider();
-    if (USE_API) {
-        loadListingsFromAPI();
-    } else {
-        displayListings(allListings);
-    }
+    setupAuthForms();
+    initApp();
 });
 
-// ===== СЛАЙДЕР ЦІНИ =====
+async function initApp() {
+    if (USE_API) {
+        await fetchCurrentUser();
+        await loadListingsFromAPI();
+        if (authUser) {
+            await loadFavoritesFromAPI();
+        }
+    } else {
+        allListings = getMockListings();
+        displayListings(allListings);
+    }
+    updateAuthUI();
+}
+
+// ===== ІНІЦІАЛІЗАЦІЯ ФІЛЬТРІВ =====
 function initializePriceSlider() {
-    const priceSlider = document.getElementById('filterPrice');
-    const priceValue = document.getElementById('priceValue');
-    
-    if (priceSlider) {
-        priceSlider.addEventListener('input', function() {
-            priceValue.textContent = this.value;
+    // Функція залишена для сумісності, але тепер використовується input поле
+    const priceInput = document.getElementById('filterPriceInput');
+    if (priceInput) {
+        // Валідація тільки при втраті фокусу, щоб не заважати вводу
+        priceInput.addEventListener('blur', function() {
+            let value = parseInt(this.value) || 0;
+            if (value < 0) {
+                this.value = 0;
+            } else if (value > 15000) {
+                this.value = 15000;
+            } else {
+                this.value = value;
+            }
+        });
+        
+        // Дозволяємо вводити будь-які символи, але перевіряємо при blur
+        priceInput.addEventListener('input', function() {
+            // Дозволяємо порожнє значення під час вводу
+            if (this.value === '') {
+                return;
+            }
+            // Перевіряємо, чи це число
+            const numValue = parseInt(this.value);
+            if (isNaN(numValue) && this.value !== '') {
+                // Якщо не число і не порожнє, залишаємо попереднє значення
+                return;
+            }
         });
     }
 }
@@ -96,71 +77,89 @@ function initializePriceSlider() {
 // ===== ВІДОБРАЖЕННЯ ОГОЛОШЕНЬ =====
 function displayListings(listings) {
     const container = document.getElementById('listingsContainer');
-    
+
     if (!container) return;
-    
-    if (listings.length === 0) {
+
+    if (!listings || listings.length === 0) {
         container.innerHTML = `
             <div class="alert alert-info" style="border-radius: 15px; border: 1px solid #b8c5e8; background: #f0f4ff;">
-                <strong>Оголошень не знайдено.</strong> Спробуйте змінити параметри фільтрів.
+                <strong>Оголошень не знайдено.</strong> Спробуй змінити параметри фільтрів.
             </div>
         `;
         return;
     }
-    
-    container.innerHTML = listings.map(listing => {
-        // Перевіряємо чи це МОЄ оголошення
-        const isMyListing = listing.student_id === currentStudentId;
-        
-        return `
-            <div class="listing-card" data-listing-id="${listing.id}">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <h4>Шукаю співмешканця/співмешканку</h4>
-                            ${isMyListing ? '<span class="badge bg-warning text-dark" style="height: fit-content; margin-left: 10px;">МОЄ 🏷️</span>' : ''}
-                        </div>
-                        
-                        <p class="text-muted mb-2">
-                            <span class="badge bg-info badge-custom">${listing.gender === 'хлопець' ? 'Хлопець' : 'Дівчина'}</span>
-                            <span class="badge bg-success badge-custom">${listing.faculty}</span>
-                            <span class="badge bg-warning text-dark badge-custom">${listing.course} курс</span>
-                        </p>
-                        <p><strong>Спеціальність:</strong> ${listing.specialty}</p>
-                        <p><strong>Район:</strong> ${listing.district}</p>
-                        <p><strong>Адреса:</strong> ${listing.address}</p>
-                        <p><strong>Кімнат:</strong> ${listing.rooms_count} | <strong>Мешканців:</strong> ${listing.people_count}</p>
-                        <p><strong>Комунальні:</strong> ${listing.utilities_included ? 'включені' : 'окремо'}</p>
-                        ${listing.additional_info ? `<p class="mb-2"><strong>Додатково:</strong> ${listing.additional_info}</p>` : ''}
-                        
-                        <div class="contact-info">
-                            <strong>Контакти:</strong><br>
-                            📱 ${listing.contact_phone}<br>
-                            ${listing.contact_telegram ? `💬 Telegram: ${listing.contact_telegram}<br>` : ''}
-                            ${listing.contact_instagram ? `📷 Instagram: ${listing.contact_instagram}` : ''}
-                        </div>
-                        
-                        <!-- КНОПКИ - видимі тільки для свого оголошення -->
-                        ${isMyListing ? `
-                            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                                <button class="btn btn-sm btn-warning" onclick="editListing(${listing.id})" style="padding: 10px 20px;">
-                                    ✏️ Редагувати
-                                </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteListing(${listing.id})" style="padding: 10px 20px;">
-                                    🗑️ Видалити
-                                </button>
-                            </div>
-                        ` : ''}
+
+    container.innerHTML = listings.map(generateListingCard).join('');
+}
+
+function generateListingCard(listing) {
+    // Власник — якщо залогінений через backend або локальний
+    const isMyListing = authUser && listing.student_id === `user_${authUser.id}`;
+    const utilitiesText = listing.utilities_included ? 'включені' : 'окремо';
+
+    return `
+        <div class="listing-card" data-listing-id="${listing.id}">
+            <div class="row">
+                <div class="col-md-8">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h4>Шукаю співмешканця/співмешканку</h4>
+                        ${isMyListing ? '<span class="badge bg-warning text-dark" style="height: fit-content; margin-left: 10px;">МОЄ 🏷️</span>' : ''}
                     </div>
                     
-                    <div class="col-md-4 text-end">
-                        <div class="price-tag">${listing.price} грн/міс</div>
-                        <small class="text-muted">Опубліковано: ${formatDate(listing.created_at)}</small>
+                    <p class="text-muted mb-2">
+                        <span class="badge bg-info badge-custom">${listing.gender === 'хлопець' ? 'Хлопець' : 'Дівчина'}</span>
+                        <span class="badge bg-success badge-custom">${listing.faculty}</span>
+                        <span class="badge bg-warning text-dark badge-custom">${listing.course} курс</span>
+                    </p>
+                    <p><strong>Спеціальність:</strong> ${listing.specialty}</p>
+                    <p><strong>Район:</strong> ${listing.district}</p>
+                    <p><strong>Адреса:</strong> ${listing.address}</p>
+                    <p><strong>Кімнат:</strong> ${listing.rooms_count} | <strong>Мешканців:</strong> ${listing.people_count}</p>
+                    <p><strong>Комунальні:</strong> ${utilitiesText}</p>
+                    ${listing.additional_info ? `<p class="mb-2"><strong>Додатково:</strong> ${listing.additional_info}</p>` : ''}
+                    
+                    <div class="contact-info">
+                        <strong>Контакти:</strong><br>
+                        📱 ${listing.contact_phone}<br>
+                        ${listing.contact_telegram ? `💬 Telegram: ${listing.contact_telegram}<br>` : ''}
+                        ${listing.contact_instagram ? `📷 Instagram: ${listing.contact_instagram}` : ''}
+                    </div>
+                    
+                    ${isMyListing ? `
+                        <div style="margin-top: 15px; display: flex; gap: 10px;">
+                            <button class="btn btn-sm btn-warning" onclick="editListing(${listing.id})" style="padding: 10px 20px;">
+                                ✏️ Редагувати
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteListing(${listing.id})" style="padding: 10px 20px;">
+                                🗑️ Видалити
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div class="col-md-4 text-end">
+                    <div class="price-tag">${listing.price} грн/міс</div>
+                    <small class="text-muted d-block mb-2">Опубліковано: ${formatDate(listing.created_at)}</small>
+                    <div class="listing-actions">
+                        ${renderFavoriteAction(listing)}
                     </div>
                 </div>
             </div>
-        `;
-    }).join('');
+        </div>
+    `;
+}
+
+function renderFavoriteAction(listing) {
+    if (!authUser) {
+        return `<button class="btn-favorite" onclick="openAuthModal('login')">♡ Додати в обрані</button>`;
+    }
+
+    const isFavorite = favoriteIds.has(Number(listing.id));
+    return `
+        <button class="btn-favorite ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(${listing.id})">
+            ${isFavorite ? '❤️ В обраних' : '♡ Додати в обрані'}
+        </button>
+    `;
 }
 
 // ===== ФОРМАТУВАННЯ ДАТИ =====
@@ -174,21 +173,8 @@ function formatDate(dateString) {
 
 // ===== ФІЛЬТРИ =====
 function applyFilters() {
-    const price = parseInt(document.getElementById('filterPrice').value);
-    const district = document.getElementById('filterDistrict').value;
-    const faculty = document.getElementById('filterFaculty').value;
-    const gender = document.getElementById('filterGender').value;
+    displayListings(getFilteredListings());
 
-    let filtered = allListings.filter(listing => {
-        if (price && listing.price > price) return false;
-        if (district && listing.district !== district) return false;
-        if (faculty && listing.faculty !== faculty) return false;
-        if (gender && listing.gender !== gender) return false;
-        return true;
-    });
-
-    displayListings(filtered);
-    
     const container = document.getElementById('listingsContainer');
     if (container) {
         container.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -196,8 +182,8 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    document.getElementById('filterPrice').value = 10000;
-    document.getElementById('priceValue').textContent = '10000';
+    const priceInput = document.getElementById('filterPriceInput');
+    if (priceInput) priceInput.value = 0;
     document.getElementById('filterDistrict').value = '';
     document.getElementById('filterFaculty').value = '';
     document.getElementById('filterGender').value = '';
@@ -205,8 +191,26 @@ function resetFilters() {
     displayListings(allListings);
 }
 
+function getFilteredListings() {
+    const priceInput = document.getElementById('filterPriceInput');
+    const priceValue = priceInput ? priceInput.value : '0';
+    const price = priceValue === '' || priceValue === '0' ? 0 : parseInt(priceValue);
+    const district = document.getElementById('filterDistrict').value;
+    const faculty = document.getElementById('filterFaculty').value;
+    const gender = document.getElementById('filterGender').value;
+
+    return allListings.filter(listing => {
+        // Якщо price = 0, то фільтр по ціні не застосовується
+        if (price > 0 && listing.price > price) return false;
+        if (district && listing.district !== district) return false;
+        if (faculty && listing.faculty !== faculty) return false;
+        if (gender && listing.gender !== gender) return false;
+        return true;
+    });
+}
+
 // ===== ДОДАВАННЯ ОГОЛОШЕННЯ =====
-function submitListing() {
+async function submitListing() {
     const form = document.getElementById('addListingForm');
     
     if (!form.checkValidity()) {
@@ -214,11 +218,16 @@ function submitListing() {
         return;
     }
 
+    if (!authUser) {
+        openAuthModal('login');
+        return;
+    }
+
     const formData = new FormData(form);
     
+    const nextId = allListings.length ? Math.max(...allListings.map(l => Number(l.id) || 0)) + 1 : 1;
     const newListing = {
-        id: Math.max(...allListings.map(l => l.id), 0) + 1,
-        student_id: currentStudentId, // 🔑 ВАЖЛИВО: зберігаємо ID студента
+        student_id: authUser ? `user_${authUser.id}` : currentStudentId,
         gender: formData.get('gender'),
         faculty: formData.get('faculty'),
         course: parseInt(formData.get('course')),
@@ -236,8 +245,12 @@ function submitListing() {
         created_at: new Date().toISOString().split('T')[0]
     };
 
+    if (!USE_API) {
+        newListing.id = nextId;
+    }
+
     if (USE_API) {
-        addListingAPI(newListing);
+        await addListingAPI(newListing);
     } else {
         allListings.unshift(newListing);
         displayListings(allListings);
@@ -254,9 +267,8 @@ function editListing(listingId) {
         alert('❌ Оголошення не знайдено');
         return;
     }
-    
     // Перевіряємо чи це МОЄ оголошення
-    if (listing.student_id !== currentStudentId) {
+    if (!authUser || listing.student_id !== `user_${authUser.id}`) {
         alert('❌ Ти можеш редагувати тільки своє оголошення!');
         return;
     }
@@ -291,7 +303,7 @@ function editListing(listingId) {
 }
 
 // ===== ОНОВЛЕННЯ / ДОДАВАННЯ ОГОЛОШЕННЯ =====
-function submitListingUpdated() {
+async function submitListingUpdated() {
     const form = document.getElementById('addListingForm');
     
     if (!form.checkValidity()) {
@@ -307,7 +319,7 @@ function submitListingUpdated() {
         const listingIndex = allListings.findIndex(l => l.id === parseInt(editingId));
         
         if (listingIndex !== -1) {
-            allListings[listingIndex] = {
+            const updatedListing = {
                 ...allListings[listingIndex],
                 gender: formData.get('gender'),
                 faculty: formData.get('faculty'),
@@ -324,8 +336,14 @@ function submitListingUpdated() {
                 contact_telegram: formData.get('contact_telegram') || '',
                 contact_instagram: formData.get('contact_instagram') || ''
             };
-            
-            displayListings(allListings);
+
+            if (USE_API) {
+                await updateListingAPI(parseInt(editingId), updatedListing);
+            } else {
+                allListings[listingIndex] = updatedListing;
+                displayListings(allListings);
+            }
+
             form.reset();
             form.dataset.editingListingId = '';
             closeModalAndShowSuccess('✅ Оголошення успішно оновлено!');
@@ -334,29 +352,31 @@ function submitListingUpdated() {
             submitBtn.textContent = 'Опублікувати оголошення';
         }
     } else {
-        // ДОДАВАННЯ
-        submitListing();
+        await submitListing();
     }
 }
 
 // ===== ВИДАЛЕННЯ ОГОЛОШЕННЯ =====
-function deleteListing(listingId) {
+async function deleteListing(listingId) {
     const listing = allListings.find(l => l.id === listingId);
     
     if (!listing) {
         alert('❌ Оголошення не знайдено');
         return;
     }
-    
     // Перевіряємо чи це МОЄ оголошення
-    if (listing.student_id !== currentStudentId) {
+    if (!authUser || listing.student_id !== `user_${authUser.id}`) {
         alert('❌ Ти можеш видаляти тільки своє оголошення!');
         return;
     }
     
     if (confirm('❌ Ти впевнений що хочеш видалити це оголошення?')) {
-        allListings = allListings.filter(l => l.id !== listingId);
-        displayListings(allListings);
+        if (USE_API) {
+            await deleteListingAPI(listingId);
+        } else {
+            allListings = allListings.filter(l => l.id !== listingId);
+            displayListings(allListings);
+        }
         showSuccessMessage('🗑️ Оголошення видалено!');
     }
 }
@@ -401,21 +421,41 @@ function showSuccessMessage(message) {
 // ===== API ФУНКЦІЇ (для коли запустиш backend) =====
 async function loadListingsFromAPI() {
     try {
-        const response = await fetch(API_URL);
-        if (!response.ok) throw new Error('Network error');
+        const response = await fetch(ENDPOINTS.listings, { credentials: 'include' });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
-        allListings = data;
+        allListings = data || [];
+        console.log(`✅ Завантажено ${allListings.length} оголошень з API`);
         displayListings(allListings);
     } catch (error) {
-        console.error('Помилка завантаження:', error);
+        console.error('❌ Помилка завантаження оголошень:', error);
+        console.error('Перевір:');
+        console.error('1. Чи запущений backend сервер? (http://localhost:3000)');
+        console.error('2. Чи правильно налаштована база даних?');
+        console.error('3. Відкрий консоль браузера (F12) для деталей');
+        
+        // Показуємо повідомлення користувачу
+        const container = document.getElementById('listingsContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-warning" style="border-radius: 15px; border: 1px solid #ffc107; background: #fff3cd;">
+                    <strong>⚠️ Не вдалося завантажити оголошення</strong><br>
+                    <small>Перевір, чи запущений backend сервер на http://localhost:3000</small><br>
+                    <small>Відкрий консоль браузера (F12) для деталей помилки</small>
+                </div>
+            `;
+        }
     }
 }
 
 async function addListingAPI(listing) {
     try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(ENDPOINTS.listings, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(listing)
         });
         
@@ -429,3 +469,378 @@ async function addListingAPI(listing) {
         alert('❌ Помилка при додаванні оголошення');
     }
 }
+
+async function updateListingAPI(id, listing) {
+    const response = await fetch(`${ENDPOINTS.listings}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(listing)
+    });
+
+    if (!response.ok) {
+        console.error('Помилка оновлення');
+        alert('❌ Не вдалося оновити оголошення');
+        return;
+    }
+
+    await loadListingsFromAPI();
+}
+
+async function deleteListingAPI(id) {
+    const response = await fetch(`${ENDPOINTS.listings}/${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+    });
+
+    if (!response.ok) {
+        console.error('Помилка видалення');
+        alert('❌ Не вдалося видалити оголошення');
+        return;
+    }
+
+    await loadListingsFromAPI();
+}
+
+// ===== AUTH =====
+function setupAuthForms() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(loginForm);
+            await login(formData.get('email'), formData.get('password'));
+        });
+    }
+
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(registerForm);
+            await register({
+                full_name: formData.get('full_name'),
+                email: formData.get('email'),
+                password: formData.get('password')
+            });
+        });
+    }
+}
+
+function switchAuthMode(mode) {
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    if (loginForm && registerForm) {
+        loginForm.classList.toggle('d-none', mode !== 'login');
+        registerForm.classList.toggle('d-none', mode !== 'register');
+    }
+}
+
+function openAuthModal(mode = 'login') {
+    switchAuthMode(mode);
+    const modalEl = document.getElementById('authModal');
+    if (!modalEl) return;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+function openAddListingModal() {
+    if (!authUser) {
+        openAuthModal('login');
+        return;
+    }
+
+    const form = document.getElementById('addListingForm');
+    if (form) {
+        form.reset();
+        delete form.dataset.editingListingId;
+    }
+
+    const submitBtn = document.querySelector('.modal-footer .btn-primary-custom');
+    if (submitBtn) submitBtn.textContent = 'Опублікувати оголошення';
+
+    const modalEl = document.getElementById('addListingModal');
+    if (!modalEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+}
+
+function closeAuthModal() {
+    const modalEl = document.getElementById('authModal');
+    if (!modalEl) return;
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    modal?.hide();
+}
+
+async function register(payload) {
+    try {
+        const response = await fetch(`${ENDPOINTS.auth}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Не вдалося створити аккаунт');
+        }
+
+        const data = await response.json();
+        authUser = data.user;
+        await loadFavoritesFromAPI();
+        updateAuthUI();
+        closeAuthModal();
+        showSuccessMessage('🎉 Реєстрація успішна!');
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function login(email, password) {
+    try {
+        const response = await fetch(`${ENDPOINTS.auth}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Невірні облікові дані');
+        }
+
+        const data = await response.json();
+        authUser = data.user;
+        await loadFavoritesFromAPI();
+        updateAuthUI();
+        closeAuthModal();
+        showSuccessMessage('👋 Вітаємо, вхід успішний!');
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function logout() {
+    try {
+        await fetch(`${ENDPOINTS.auth}/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } finally {
+        authUser = null;
+        favoriteIds.clear();
+        favoriteListings = [];
+        updateAuthUI();
+        renderFavoritesPanel();
+        hideFavoritesPanel();
+        showSuccessMessage('👋 До зустрічі!');
+    }
+}
+
+async function fetchCurrentUser() {
+    try {
+        const response = await fetch(`${ENDPOINTS.auth}/me`, {
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            authUser = data.user;
+        } else {
+            authUser = null;
+        }
+    } catch (error) {
+        console.warn('Не вдалося отримати користувача', error);
+        authUser = null;
+    }
+}
+
+// ===== FAVORITES =====
+async function loadFavoritesFromAPI() {
+    if (!authUser) return;
+
+    try {
+        const response = await fetch(ENDPOINTS.favorites, { credentials: 'include' });
+        if (!response.ok) throw new Error('Network error');
+
+        const data = await response.json();
+        favoriteListings = data;
+        favoriteIds = new Set(data.map(item => Number(item.id)));
+        renderFavoritesPanel();
+        displayListings(getFilteredListings());
+    } catch (error) {
+        console.error('Помилка отримання обраних:', error);
+    }
+}
+
+async function toggleFavorite(listingId) {
+    if (!authUser) {
+        openAuthModal('login');
+        return;
+    }
+
+    const isFavorite = favoriteIds.has(Number(listingId));
+    const method = isFavorite ? 'DELETE' : 'POST';
+
+    try {
+        const response = await fetch(`${ENDPOINTS.favorites}/${listingId}`, {
+            method,
+            credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('Не вдалося оновити обране');
+
+        await loadFavoritesFromAPI();
+        showSuccessMessage(isFavorite ? '❤️ Видалено з обраних' : '❤️ Додано до обраних');
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+function renderFavoritesPanel() {
+    const container = document.getElementById('favoritesContainer');
+    if (!container) return;
+
+    if (!authUser) {
+        container.innerHTML = `
+            <div class="alert alert-info">
+                Увійди, щоб бачити свої збережені оголошення.
+            </div>
+        `;
+        return;
+    }
+
+    if (favoriteListings.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-warning">
+                Поки що немає обраних оголошень. Натисни «Додати в обрані» на картці.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = favoriteListings.map(generateListingCard).join('');
+}
+
+function showFavoritesPanel() {
+    const panel = document.getElementById('favoritesSection');
+    if (!panel) return;
+    panel.classList.remove('d-none');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hideFavoritesPanel() {
+    const panel = document.getElementById('favoritesSection');
+    if (!panel) return;
+    panel.classList.add('d-none');
+}
+
+function updateAuthUI() {
+    const authControls = document.getElementById('authControls');
+    const favoritesToggle = document.getElementById('favoritesToggle');
+
+    if (!authControls) return;
+
+    if (authUser) {
+        authControls.innerHTML = `
+            <div class="dropdown">
+                <button class="btn btn-outline-auth dropdown-toggle" data-bs-toggle="dropdown">
+                    ${authUser.full_name || authUser.email}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><button class="dropdown-item" type="button" onclick="showFavoritesPanel()">Мої обрані</button></li>
+                    <li><button class="dropdown-item" type="button" onclick="logout()">Вийти</button></li>
+                </ul>
+            </div>
+        `;
+        favoritesToggle?.classList.remove('d-none');
+    } else {
+        authControls.innerHTML = `
+            <button class="btn btn-outline-auth" onclick="openAuthModal('login')">
+                Увійти
+            </button>
+            <button class="btn btn-outline-auth" onclick="openAuthModal('register')">
+                Зареєструватись
+            </button>
+        `;
+        favoritesToggle?.classList.add('d-none');
+    }
+}
+
+// ===== MOCK DATA ДЛЯ ОФЛАЙН РЕЖИМУ =====
+function getMockListings() {
+    return [
+        {
+            id: 1,
+            student_id: 'student_sample_1',
+            gender: 'дівчина',
+            faculty: 'Прикладної математики та інформатики',
+            course: 3,
+            specialty: 'Комп\'ютерні науки',
+            district: 'Франківський',
+            address: 'вул. Наукова, 15',
+            rooms_count: 2,
+            people_count: 1,
+            price: 2500,
+            utilities_included: true,
+            additional_info: 'Тиха квартира, поблизу університет.',
+            contact_phone: '+380 67 123 4567',
+            contact_telegram: '@example_user',
+            contact_instagram: '@example_user',
+            created_at: '2024-03-15'
+        },
+        {
+            id: 2,
+            student_id: 'student_sample_2',
+            gender: 'хлопець',
+            faculty: 'Економічний',
+            course: 2,
+            specialty: 'Економіка',
+            district: 'Сихівський',
+            address: 'вул. Стрийська, 201',
+            rooms_count: 3,
+            people_count: 2,
+            price: 2000,
+            utilities_included: false,
+            additional_info: 'Велика квартира, є Wi-Fi, пральна машина.',
+            contact_phone: '+380 95 987 6543',
+            contact_telegram: '@student_lviv',
+            contact_instagram: '',
+            created_at: '2024-03-20'
+        },
+        {
+            id: 3,
+            student_id: 'student_sample_3',
+            gender: 'дівчина',
+            faculty: 'Філологічний',
+            course: 4,
+            specialty: 'Українська мова',
+            district: 'Галицький',
+            address: 'вул. Коперника, 7',
+            rooms_count: 2,
+            people_count: 1,
+            price: 3000,
+            utilities_included: true,
+            additional_info: 'Центр міста, поруч бібліотека.',
+            contact_phone: '+380 98 765 4321',
+            contact_telegram: '@studentka_lnu',
+            contact_instagram: '@student_life',
+            created_at: '2024-03-22'
+        }
+    ];
+}
+
+// Після генерації currentStudentId
+authUser = {
+    id: 1,
+    full_name: 'Тестовий Користувач',
+    email: 'test@example.com'
+};

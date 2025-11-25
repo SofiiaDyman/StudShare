@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const auth = require('../middleware/auth');
 
 /**
  * @swagger
@@ -132,12 +133,15 @@ router.get('/:id', async (req, res) => {
  *       400:
  *         description: Невалідні дані
  */
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
     const {
-        student_id, gender, faculty, course, specialty, district, address,
+        gender, faculty, course, specialty, district, address,
         rooms_count, people_count, price, utilities_included,
         additional_info, contact_phone, contact_telegram, contact_instagram
     } = req.body;
+
+    // Використовуємо ID користувача з токену (безпечніше, ніж приймати студентський id з клієнта)
+    const student_id = `user_${req.user.id}`;
 
     // Валідація обов'язкових полів
     if (!student_id || !gender || !faculty || !course || !specialty || 
@@ -151,7 +155,7 @@ router.post('/', async (req, res) => {
             (student_id, gender, faculty, course, specialty, district, address, 
              rooms_count, people_count, price, utilities_included, additional_info, 
              contact_phone, contact_telegram, contact_instagram) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [student_id, gender, faculty, course, specialty, district, address,
              rooms_count, people_count, price, utilities_included || false,
              additional_info, contact_phone, contact_telegram, contact_instagram]
@@ -201,6 +205,34 @@ router.put('/:id', async (req, res) => {
     } = req.body;
 
     try {
+        // Перевіряємо, чи існує оголошення та чи належить воно користувачу
+        const [existingRows] = await db.query('SELECT student_id FROM listings WHERE id = ?', [req.params.id]);
+        if (existingRows.length === 0) {
+            return res.status(404).json({ error: 'Listing not found' });
+        }
+        const ownerId = existingRows[0].student_id;
+        // Очікуємо формат `user_<id>`
+        // Якщо middleware не підключений, віддаємо 401
+        if (!req.headers.authorization && !req.cookies?.token) {
+            // Неавторизований запит
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // Спробуємо витягнути id користувача з токену (middleware краще підключити на маршрут)
+        // Для надійності додамо авторизацію на цей маршрут також
+        const authMiddleware = require('../middleware/auth');
+        await new Promise((resolve, reject) => {
+            authMiddleware(req, res, (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+
+        const currentUserId = `user_${req.user.id}`;
+        if (ownerId !== currentUserId) {
+            return res.status(403).json({ error: 'Forbidden: you are not the owner' });
+        }
+
         const [result] = await db.query(
             `UPDATE listings 
             SET gender = ?, faculty = ?, course = ?, specialty = ?, 
@@ -214,14 +246,10 @@ router.put('/:id', async (req, res) => {
              req.params.id]
         );
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Listing not found' });
-        }
-
         res.json({ message: 'Listing updated successfully' });
     } catch (error) {
         console.error('Помилка оновлення:', error);
-        res.status(500).json({ error: 'Database error' });
+        if (!res.headersSent) res.status(500).json({ error: 'Database error' });
     }
 });
 
@@ -247,19 +275,32 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
     try {
-        const [result] = await db.query(
-            'DELETE FROM listings WHERE id = ?',
-            [req.params.id]
-        );
-
-        if (result.affectedRows === 0) {
+        // Перевіряємо власника оголошення
+        const [existingRows] = await db.query('SELECT student_id FROM listings WHERE id = ?', [req.params.id]);
+        if (existingRows.length === 0) {
             return res.status(404).json({ error: 'Listing not found' });
         }
 
+        // Перевіряємо авторизацію
+        const authMiddleware = require('../middleware/auth');
+        await new Promise((resolve, reject) => {
+            authMiddleware(req, res, (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+
+        const ownerId = existingRows[0].student_id;
+        const currentUserId = `user_${req.user.id}`;
+        if (ownerId !== currentUserId) {
+            return res.status(403).json({ error: 'Forbidden: you are not the owner' });
+        }
+
+        const [result] = await db.query('DELETE FROM listings WHERE id = ?', [req.params.id]);
         res.json({ message: 'Listing deleted successfully' });
     } catch (error) {
         console.error('Помилка видалення:', error);
-        res.status(500).json({ error: 'Database error' });
+        if (!res.headersSent) res.status(500).json({ error: 'Database error' });
     }
 });
 

@@ -9,43 +9,44 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Навігаційна панель з логотипом -->
-    <nav class="navbar navbar-light bg-white shadow-sm fixed-top">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand logo" href="#">
-                <span class="logo-icon">🏠</span>
-                <span class="logo-text">StudShare</span>
-            </a>
-            <button class="btn btn-add-nav" data-bs-toggle="modal" data-bs-target="#addListingModal">
-                <span class="btn-icon">+</span> Додати оголошення
-            </button>
-        </div>
-    </nav>
+    <!-- Заголовок з фоновим зображенням на весь екран -->
+    <div class="header-fullscreen">
+        <!-- Навігаційна панель напівпрозора -->
+        <nav class="navbar-transparent fixed-top">
+            <div class="container-fluid px-4 d-flex justify-content-between align-items-center">
+                <a class="navbar-brand logo" href="#">
+                    <span class="logo-text">StudShare</span>
+                </a>
+                    <div class="nav-menu">
+                    <button class="nav-item active" onclick="scrollToTop()">Головна</button>
+                    <button class="nav-item" onclick="openAddListingModal()">Додати оголошення</button>
+                    <div id="authControls" class="auth-controls">
+                        <button class="nav-item" data-bs-toggle="modal" data-bs-target="#authModal" onclick="openAuthModal('login')">Увійти</button>
+                        <button class="btn-contact" data-bs-toggle="modal" data-bs-target="#authModal" onclick="openAuthModal('register')">Зареєструватись</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
 
-    <!-- Заголовок -->
-    <div class="header">
-        <div class="container">
+        <div class="header-overlay"></div>
+        <div class="container header-content">
             <h1 class="header-title">Знайди своє ідеальне житло</h1>
             <p class="header-subtitle">для студентів ЛНУ імені Івана Франка</p>
         </div>
-    </div>
 
-    <div class="container main-content">
-        <!-- Фільтри -->
-        <div class="filters-section">
-            <h5 class="filters-title mb-4">Фільтри пошуку</h5>
-            <div class="row g-3">
-                <div class="col-md-3">
+        <!-- Фільтри на фоні фото -->
+        <div class="filters-section-overlay">
+            <h5 class="filters-title">Знайди своє ідеальне житло</h5>
+            <div class="filters-row">
+                <div class="filter-item">
                     <label class="form-label">Ціна до</label>
-                    <div class="price-slider-container">
-                        <input type="range" class="form-range price-slider" id="filterPrice" 
-                               min="1000" max="10000" step="500" value="10000">
-                        <div class="price-display">
-                            <span id="priceValue">10000</span> грн/міс
-                        </div>
+                    <div class="price-input-wrapper">
+                        <input type="number" class="form-control price-input" id="filterPriceInput" 
+                               min="0" max="15000" step="100" value="0" placeholder="Ціна">
+                        <span class="price-unit">грн/міс</span>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="filter-item">
                     <label class="form-label">Район</label>
                     <select class="form-select custom-select" id="filterDistrict">
                         <option value="">Всі райони</option>
@@ -57,7 +58,7 @@
                         <option value="Сихівський">Сихівський</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="filter-item">
                     <label class="form-label">Факультет</label>
                     <select class="form-select custom-select" id="filterFaculty">
                         <option value="">Всі факультети</option>
@@ -82,7 +83,7 @@
                         <option value="Юридичний">Юридичний</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="filter-item">
                     <label class="form-label">Стать</label>
                     <select class="form-select custom-select" id="filterGender">
                         <option value="">Не важливо</option>
@@ -90,14 +91,32 @@
                         <option value="дівчина">Дівчина</option>
                     </select>
                 </div>
-            </div>
-            <div class="row mt-4">
-                <div class="col-12">
-                    <button class="btn btn-primary-custom" onclick="applyFilters()">Застосувати фільтри</button>
-                    <button class="btn btn-secondary-custom" onclick="resetFilters()">Скинути</button>
+                <div class="filter-item filter-button">
+                    <button class="btn btn-search-custom" onclick="applyFilters()">Застосувати фільтри</button>
+                    <button class="btn btn-secondary-custom ms-2" onclick="resetFilters()">Скинути</button>
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="container main-content">
+        <div class="favorites-toggle text-end mb-3">
+            <button id="favoritesToggle" class="btn btn-outline-favorite d-none" onclick="showFavoritesPanel()">
+                Мої обрані
+            </button>
+        </div>
+        <section id="favoritesSection" class="favorites-panel d-none">
+            <div class="favorites-panel__header">
+                <div>
+                    <h5 class="favorites-title mb-1">Збережені оголошення</h5>
+                    <p class="text-muted mb-0">Усі оголошення, які ти додав у обрані</p>
+                </div>
+                <div class="favorites-panel__actions">
+                    <button class="btn btn-secondary-custom" onclick="hideFavoritesPanel()">Закрити</button>
+                </div>
+            </div>
+            <div id="favoritesContainer"></div>
+        </section>
 
         <!-- Список оголошень -->
         <div id="listingsContainer"></div>
@@ -226,7 +245,59 @@
         </div>
     </div>
 
+    <!-- Auth Modal -->
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header flex-column align-items-start">
+                    <h5 class="modal-title mb-3">Особистий кабінет</h5>
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" data-mode="login" onclick="switchAuthMode('login')">Вхід</button>
+                        <button class="auth-tab" data-mode="register" onclick="switchAuthMode('register')">Реєстрація</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm" class="auth-form">
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control custom-input" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Пароль</label>
+                            <input type="password" class="form-control custom-input" name="password" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary-custom w-100">Увійти</button>
+                    </form>
+
+                    <form id="registerForm" class="auth-form d-none">
+                        <div class="mb-3">
+                            <label class="form-label">Ім'я та прізвище</label>
+                            <input type="text" class="form-control custom-input" name="full_name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control custom-input" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Пароль</label>
+                            <input type="password" class="form-control custom-input" name="password" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-primary-custom w-100">Створити акаунт</button>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <p class="small text-muted mb-0">Пароль повинен містити мінімум 6 символів.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script src="script.js"></script>
+    <script>
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
 </body>
 </html>

@@ -8,6 +8,8 @@ COLLATE utf8mb4_unicode_ci;
 USE student_housing;
 
 -- ===== ВИДАЛЕННЯ ТАБЛИЦІ ЯКЩО ІСНУЄ =====
+DROP TABLE IF EXISTS favorite_listings;
+DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS listings;
 
 -- ===== СТВОРЕННЯ ТАБЛИЦІ ОГОЛОШЕНЬ =====
@@ -56,6 +58,28 @@ CREATE TABLE listings (
     
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Таблиця оголошень про житло';
+
+-- ===== ТАБЛИЦЯ КОРИСТУВАЧІВ =====
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='Облікові записи користувачів';
+
+-- ===== ТАБЛИЦЯ ОБРАНИХ ОГОЛОШЕНЬ =====
+CREATE TABLE favorite_listings (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    listing_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_favorite (user_id, listing_id),
+    CONSTRAINT fk_favorites_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_favorites_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='Збережені студентами оголошення';
 
 -- ===== ДОДАВАННЯ ТЕСТОВИХ ДАНИХ =====
 
