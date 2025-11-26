@@ -19,7 +19,7 @@
    ```bash
    cd backend
    ```
-2. Створи файл `.env` (або скопіюй з `.env.example`) і налаштуй:
+2. Створи файл `.env` і налаштуй:
    ```env
    DB_HOST=localhost
    DB_USER=root
