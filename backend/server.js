@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 if (!process.env.JWT_SECRET) {
-    console.warn('⚠️  JWT_SECRET не задано у .env. Автентифікація може не працювати.');
+    console.warn(' JWT_SECRET не задано у .env. Автентифікація може не працювати.');
 }
 
 // ===== MIDDLEWARE =====
@@ -18,17 +18,17 @@ const allowedOrigins = [
     'http://localhost:5500'
 ];
 
+// Налаштування CORS для взаємодії з клієнтом
 app.use(cors({
     origin: function (origin, callback) {
-        // Дозволяємо Postman/Swagger (без origin)
-        if (!origin) return callback(null, true);
+    // дозволяємо запити без origin (Swagger, Postman)
+    if (!origin) return callback(null, true);
 
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('CORS blocked by server'), false);
-        }
-    },
+    if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+    }
+    return callback(null, false);
+},
     credentials: true
 }));
 
